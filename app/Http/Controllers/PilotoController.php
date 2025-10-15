@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Piloto;
+use App\Models\Usuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class PilotoController extends Controller
@@ -93,7 +97,7 @@ class PilotoController extends Controller
         return response()->json($piloto, 200);
     }
 
-    // store
+    // store (cria Piloto e cria/associa Usuario do tipo USER automaticamente)
     public function store(Request $request)
     {
         Log::debug('Piloto.store payload:', $request->all());
@@ -129,17 +133,64 @@ class PilotoController extends Controller
         // mapear somente colunas existentes
         $dbData = $this->mapPayloadToDb($payload);
 
-        // se não tiver coluna CPF no db, tente criar sem check (fallback)
+        DB::beginTransaction();
         try {
             // verifica duplicidade conforme colunas existentes
             $exists = $this->findByCpf($payload['cpf_piloto']);
             if ($exists) {
+                DB::rollBack();
                 return response()->json(['message' => 'Piloto com esse CPF já existe'], 409);
             }
 
+            // cria piloto
             $piloto = Piloto::create($dbData);
-            return response()->json($piloto, 201);
+
+            // lógica de criação/ligação de usuário
+            $tempPassword = null;
+            $createdUser = null;
+            $emailToUse = $payload['email_piloto'] ?? $payload['email'] ?? null;
+            $nomeToUse = $payload['nome_piloto'] ?? $payload['nome'] ?? null;
+
+            if ($emailToUse) {
+                // se já existe usuário com esse email, só liga
+                $usuario = Usuario::where('email', $emailToUse)->first();
+
+                if (!$usuario) {
+                    // gerar senha temporária (8 caracteres seguros)
+                    $tempPassword = substr(bin2hex(random_bytes(4)),0,8);
+
+                    $usuario = Usuario::create([
+                        'nome' => $nomeToUse ?? $emailToUse,
+                        'email' => $emailToUse,
+                        'senha_hash' => Hash::make($tempPassword), // mantemos o hash no controller, como pediu
+                        'tipo' => 'USER',
+                        'is_active' => true,
+                    ]);
+                    $createdUser = $usuario;
+                }
+
+                // tenta associar FK usuario_id se existir a coluna
+                if (Schema::hasColumn('pilotos', 'usuario_id')) {
+                    $piloto->usuario_id = $usuario->id;
+                    $piloto->save();
+                } elseif (Schema::hasColumn('pilotos', 'email_usuario')) {
+                    $piloto->email_usuario = $usuario->email;
+                    $piloto->save();
+                }
+            }
+
+            DB::commit();
+
+            // montar resposta: incluir senha temporária somente se geramos um novo usuário
+            $response = ['piloto' => $piloto];
+            if ($createdUser && $tempPassword) {
+                $response['temp_password'] = $tempPassword;
+                $response['note'] = 'Senha temporária retornada apenas para o administrador. Em produção envie por e-mail seguro.';
+            }
+
+            return response()->json($response, 201);
         } catch (\Throwable $e) {
+            DB::rollBack();
             Log::error('Erro ao criar Piloto: '.$e->getMessage());
             return response()->json(['message' => 'Erro interno ao criar piloto', 'detail' => $e->getMessage()], 500);
         }
