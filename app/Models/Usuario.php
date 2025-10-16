@@ -13,15 +13,19 @@ class Usuario extends Authenticatable implements JWTSubject
 
     /**
      * Campos que podem ser preenchidos em massa.
-     * Adicione ou remova conforme suas colunas reais.
+     * Incluí tanto 'tipo' quanto 'tipo_usuario' para compatibilidade.
+     * Remova o que não existir no seu banco de dados.
      */
     protected $fillable = [
         'nome',
         'email',
         'senha_hash',
-        'tipo',        // ADMIN | FISCAL | USER
-        'is_active',   // opcional: se existir na tabela
-        'email_verified_at', // opcional
+        'senha',            // permite atribuir $usuario->senha = 'texto' (mutator irá transformar)
+        'tipo',             // legacy (se sua tabela usar 'tipo')
+        'tipo_usuario',     // alternativa: 'tipo_usuario'
+        'is_active',
+        'must_change_password',
+        'email_verified_at',
     ];
 
     /**
@@ -37,6 +41,7 @@ class Usuario extends Authenticatable implements JWTSubject
      */
     protected $casts = [
         'is_active' => 'boolean',
+        'must_change_password' => 'boolean',
         'email_verified_at' => 'datetime',
     ];
 
@@ -49,17 +54,17 @@ class Usuario extends Authenticatable implements JWTSubject
     }
 
     /**
-     * Mutator de conveniência: se alguém setar $usuario->senha = 'texto',
-     * armazenamos automaticamente como senha_hash com Hash::make.
-     *
-     * Observação: se você já fizer Hash::make na controller antes de criar,
-     * isso só será aplicado se você atribuir 'senha' diretamente.
+     * Mutator: ao definir $usuario->senha = 'minhaSenha', gravamos como senha_hash.
+     * Também detecta strings já hashed (padrão bcrypt $2y$...).
      */
     public function setSenhaAttribute(?string $value)
     {
-        if ($value === null) return;
-        // evita re-hash de uma hash já passada por engano:
-        if (strlen($value) === 60 && preg_match('/^\$2y\$/', $value)) {
+        if ($value === null) {
+            return;
+        }
+
+        // se já parece uma hash bcrypt (60 chars e começa com $2y$/$2a$/$2b$), grava direto
+        if (is_string($value) && strlen($value) === 60 && preg_match('/^\$2[ayb]\$/', $value)) {
             $this->attributes['senha_hash'] = $value;
         } else {
             $this->attributes['senha_hash'] = Hash::make($value);
@@ -67,8 +72,15 @@ class Usuario extends Authenticatable implements JWTSubject
     }
 
     /**
-     * Relação com Piloto (caso pilote tenha usuario_id FK).
-     * Ajuste o namespace se necessário.
+     * Helper legível: se o usuario deve trocar a senha no próximo login.
+     */
+    public function needsPasswordChange(): bool
+    {
+        return (bool) ($this->must_change_password ?? false);
+    }
+
+    /**
+     * Relação com Piloto (caso exista FK usuario_id na tabela pilotos).
      */
     public function piloto(): HasOne
     {
@@ -78,14 +90,15 @@ class Usuario extends Authenticatable implements JWTSubject
     // ==== Métodos exigidos pelo JWTSubject ====
     public function getJWTIdentifier()
     {
-        return $this->getKey(); // normalmente o ID
+        return $this->getKey();
     }
 
     public function getJWTCustomClaims()
     {
-        // Inclui role/email para facilitar controle no frontend (opcional)
+        // retornamos role tanto de 'tipo' quanto 'tipo_usuario' para compatibilidade
+        $role = $this->tipo_usuario ?? $this->tipo ?? null;
         return [
-            'role' => $this->tipo ?? null,
+            'role' => $role,
             'email' => $this->email ?? null,
         ];
     }

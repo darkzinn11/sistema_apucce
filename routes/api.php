@@ -14,10 +14,6 @@ use App\Http\Controllers\CarroController;
 |--------------------------------------------------------------------------
 |
 | Rotas públicas (login / health) + rotas protegidas por auth:api (JWT).
-| Este arquivo cobre:
-| - /api/db                           -> health check
-| - /api/auth/login                   -> login público
-| - /api/... (todas as rotas protegidas por auth:api)
 |
 */
 
@@ -40,6 +36,11 @@ Route::middleware('auth:api')->group(function () {
     // Auth
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/pilotos/email/{email}', [\App\Http\Controllers\PilotoController::class, 'showByEmail']);
+
+
+    // Troca de senha (usuário autenticado muda a própria senha)
+    Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
 
     // Usuários (resource)
     Route::apiResource('usuarios', UsuarioController::class)->parameters([
@@ -50,30 +51,16 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('pilotos', PilotoController::class);
 
     // Uploads específicos usados pelo frontend (multipart/form-data)
-    // Ex.: POST /api/pilotos/{cpf}/cnh   (campo file)
-    //       POST /api/pilotos/{cpf}/termo (campo file)
     Route::post('/pilotos/{cpf}/cnh', [PilotoController::class, 'uploadCnh']);
     Route::post('/pilotos/{cpf}/termo', [PilotoController::class, 'uploadTermo']);
 
-    /**
-     * Endereços
-     * - POST /api/endereco            -> cria quando o CPF vem no body (frontend usa isso ao criar)
-     * - POST /api/endereco/{cpf}      -> cria com CPF na URL (ou em edição)
-     * - PUT  /api/endereco/{cpf}      -> atualiza
-     * - GET  /api/endereco/{cpf}      -> busca
-     */
+    // Endereço
     Route::post('/endereco', [EnderecoController::class, 'store']);
     Route::post('/endereco/{cpf}', [EnderecoController::class, 'store']);
     Route::put('/endereco/{cpf}', [EnderecoController::class, 'update']);
     Route::get('/endereco/{cpf}', [EnderecoController::class, 'show']);
 
-    /**
-     * Carros (veículo)
-     * - POST /api/carros             -> cria (cpf via body)
-     * - POST /api/carros/{cpf}       -> cria com cpf na URL
-     * - PUT  /api/carros/{cpf}       -> atualiza
-     * - GET  /api/carros/{cpf}       -> busca
-     */
+    // Carros
     Route::post('/carros', [CarroController::class, 'store']);
     Route::post('/carros/{cpf}', [CarroController::class, 'store']);
     Route::put('/carros/{cpf}', [CarroController::class, 'update']);
