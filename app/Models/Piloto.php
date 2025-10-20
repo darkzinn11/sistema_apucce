@@ -7,32 +7,42 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Piloto extends Model
 {
-    // Ajuste os nomes das colunas conforme seu banco. Incluí possíveis nomes.
+    protected $table = 'pilotos';
+
     protected $fillable = [
-        'nome',
-        'cpf',
+        'id_piloto',
+        'usuario_id',
+        'email_usuario',
+
+        'nome_piloto',
         'cpf_piloto',
-        'email',
         'email_piloto',
-        'telefone',
         'numero_telefone',
         'data_nascimento',
         'tipo_sanguineo',
-        'foto_base64',
+
+        'nome_contato_seguranca',
+        'numero_contato_seguranca',
+        'nome_plano_saude',
+
         'foto_piloto',
+        'foto_piloto_tipo',
         'foto_cnh',
-        'cnh_frente_base64',
-        'cnh_verso_base64',
+        'foto_cnh_tipo',
         'termo_adesao',
-        'usuario_id',     // opcional: FK para usuarios.id (se existir)
-        'email_usuario',  // opcional: alternativa para linkar usuário pelo email
-        'id_piloto',
+        'termo_adesao_tipo',
+
+        'tipo_endereco',
+        'cep',
+        'numero',
+        'logradouro',
+        'complemento',
+        'bairro',
+        'cidade',
+        'uf',
+        'pais',
     ];
 
-    /**
-     * Relação (opcional) com Usuario, se a coluna usuario_id existir.
-     * Ajuste se você usar outro FK.
-     */
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(\App\Models\Usuario::class, 'usuario_id', 'id');
